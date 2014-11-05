@@ -26,12 +26,24 @@ typedef int16_t i16;
 typedef int8_t i8;
 #endif
 
+// This interface is meant for internal use.
+class IExplorer
+{
+private:
+	virtual pair<u32, float> InvokeChooseAction(void* context, string unique_key) = 0;
+};
+
 template <class Ctx, class Plc>
-struct EpsilonGreedy
+struct EpsilonGreedy : public IExplorer
 {
 	EpsilonGreedy(float epsilon, u32 num_actions, Plc& policy) : policy_function(policy)
 	{ 
 		// . . .
+	}
+
+	pair<u32, float> InvokeChooseAction(void* context, string unique_key)
+	{
+		return Choose_Action(*((Ctx*)context), unique_key);
 	}
 
 	pair<u32, float> Choose_Action(Ctx& context, string unique_key)
@@ -42,18 +54,21 @@ struct EpsilonGreedy
 		return pair<u32, float>(action, prob);
 	}
 
-	typedef string hhhhhhh;
-
 private:
 	Plc& policy_function;
 };
 
 template <class Ctx, class Plc>
-struct Softmax
+struct Softmax : public IExplorer
 {
 	Softmax(float lambda, u32 num_actions, Plc& policy) : policy_function(policy)
 	{
 		// . . .
+	}
+
+	pair<u32, float> InvokeChooseAction(void* context, string unique_key)
+	{
+		return Choose_Action(*((Ctx*)context), unique_key);
 	}
 
 	pair<u32, float> Choose_Action(Ctx& context, string unique_key)
@@ -75,6 +90,11 @@ struct Mwt
 		m_app_id(app_id), m_interaction_recorder(interaction_recorder)
 	{
 		// . . .
+	}
+
+	u32 Choose_Action(IExplorer& explorer, Ctx& context, string unique_key)
+	{
+		return explorer.InvokeChooseAction(&context, unique_key);
 	}
 
 	template <class Plc>
@@ -165,7 +185,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		MyPolicy my_policy;
 		EpsilonGreedy<MyContext, MyPolicy> my_explorer(0.5f, 10, my_policy);
 
-		u32 action = mwt.Choose_Action<MyPolicy>(my_explorer, my_context, "key");
+		u32 action = mwt.Choose_Action(my_explorer, my_context, "key");
 	}
 
 	{
