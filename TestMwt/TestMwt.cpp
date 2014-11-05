@@ -26,36 +26,46 @@ typedef int16_t i16;
 typedef int8_t i8;
 #endif
 
-template <class Ctx>
+template <class Ctx, class Plc>
 struct EpsilonGreedy
 {
-	EpsilonGreedy(float epsilon, u32 num_actions) 
+	EpsilonGreedy(float epsilon, u32 num_actions, Plc& policy) : policy_function(policy)
 	{ 
 		// . . .
 	}
 
 	pair<u32, float> Choose_Action(Ctx& context, string unique_key)
 	{
-		u32 action = context.Choose_Action(); // Implicitly enforce Choose_Action() API on the context
+		u32 action = policy_function.Choose_Action(context); // Implicitly enforce Choose_Action() API on the policy
+		float prob = 0.f;
 		// . . .
-		return pair<u32, float>(action, 0.5f);
+		return pair<u32, float>(action, prob);
 	}
+
+	typedef string hhhhhhh;
+
+private:
+	Plc& policy_function;
 };
 
-template <class Ctx>
+template <class Ctx, class Plc>
 struct Softmax
 {
-	Softmax(float lambda, u32 num_actions)
+	Softmax(float lambda, u32 num_actions, Plc& policy) : policy_function(policy)
 	{
 		// . . .
 	}
 
 	pair<u32, float> Choose_Action(Ctx& context, string unique_key)
 	{
-		u32 action = context.Choose_Action(); // Implicitly enforce Choose_Action() API on the context
+		u32 action = policy_function.Choose_Action(context); // Implicitly enforce Choose_Action() API on the policy
+		float prob = 0.f;
 		// . . .
-		return pair<u32, float>(action, 0.5f);
+		return pair<u32, float>(action, prob);
 	}
+
+private:
+	Plc& policy_function;
 };
 
 template <class Ctx, class Rec>
@@ -67,20 +77,23 @@ struct Mwt
 		// . . .
 	}
 
-	u32 Choose_Action(EpsilonGreedy<Ctx>& explorer, Ctx& context, string unique_key)
+	template <class Plc>
+	u32 Choose_Action(EpsilonGreedy<Ctx, Plc>& explorer, Ctx& context, string unique_key)
 	{
-		return Choose_Action<EpsilonGreedy<Ctx>, Ctx, Rec>(explorer, context, unique_key);
+		return Choose_Action<EpsilonGreedy<Ctx, Plc>, Ctx, Rec>(explorer, context, unique_key);
 	}
 
-	u32 Choose_Action(Softmax<Ctx>& explorer, Ctx& context, string unique_key)
+	template <class Plc>
+	u32 Choose_Action(Softmax<Ctx, Plc>& explorer, Ctx& context, string unique_key)
 	{
-		return Choose_Action<Softmax<Ctx>, Ctx, Rec>(explorer, context, unique_key);
+		return Choose_Action<Softmax<Ctx, Plc>, Ctx, Rec>(explorer, context, unique_key);
 	}
 
 private:
 	template <class Exp, class Ctx, class Rec>
 	u32 Choose_Action(Exp& explorer, Ctx& context, string unique_key)
 	{
+		// Implicitly enforce Choose_Action() API on the policy
 		pair<u32, float> action_prob = explorer.Choose_Action(context, unique_key + m_app_id);
 		
 		// Implicitly enforce Record() API on the context
@@ -125,6 +138,14 @@ struct MyContext
 	}
 };
 
+struct MyPolicy
+{
+	u32 Choose_Action(MyContext& my_context)
+	{
+		return 0;
+	}
+};
+
 struct MyRecorder
 {
 	void Record(MyContext& context, u32 action, float probability, string unique_key)
@@ -141,9 +162,10 @@ int _tmain(int argc, _TCHAR* argv[])
 		Mwt<MyContext, StringRecorder<MyContext>> mwt("salt", my_recorder);
 
 		MyContext my_context;
-		EpsilonGreedy<MyContext> my_explorer(0.5f, 10);
+		MyPolicy my_policy;
+		EpsilonGreedy<MyContext, MyPolicy> my_explorer(0.5f, 10, my_policy);
 
-		u32 action = mwt.Choose_Action(my_explorer, my_context, "key");
+		u32 action = mwt.Choose_Action<MyPolicy>(my_explorer, my_context, "key");
 	}
 
 	{
@@ -152,9 +174,10 @@ int _tmain(int argc, _TCHAR* argv[])
 		Mwt<MyContext, MyRecorder> mwt("salt", my_recorder);
 
 		MyContext my_context;
-		Softmax<MyContext> my_explorer(0.5f, 10);
+		MyPolicy my_policy;
+		Softmax<MyContext, MyPolicy> my_explorer(0.5f, 10, my_policy);
 
-		u32 action = mwt.Choose_Action(my_explorer, my_context, "key");
+		u32 action = mwt.Choose_Action<MyPolicy>(my_explorer, my_context, "key");
 	}
 
 	return 0;
