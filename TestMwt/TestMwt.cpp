@@ -27,152 +27,177 @@ typedef int16_t i16;
 typedef int8_t i8;
 #endif
 
+// -------------------------------------- Example user code -------------------------------------- //
 
-template <class Plc>
-struct EpsilonGreedy
+template <class Ctx>
+class MWT;
+
+template <class Ctx>
+class IRecorder
 {
-	EpsilonGreedy(float epsilon, u32 num_actions, Plc& policy) : policy_function(policy)
-	{ 
+public:
+	virtual void Record(Ctx& context, u32 action, float probability, string unique_key) = 0;
+};
+
+template <class Ctx>
+class IPolicy
+{
+public:
+	virtual u32 Choose_Action(Ctx& context) = 0;
+};
+
+template <class Ctx>
+class IScorer
+{
+public:
+	virtual vector<float> Score_Actions(Ctx& context) = 0;
+};
+
+template <class Ctx>
+class IExplorer
+{
+private:
+	virtual std::pair<u32, float> Choose_Action(std::string unique_key, Ctx& context) = 0;
+
+private:
+	friend MWT<Ctx>;
+};
+
+template <class Ctx>
+class EpsilonGreedyExplorer : public IExplorer<Ctx>
+{
+public:
+	EpsilonGreedyExplorer(IPolicy<Ctx>& default_policy, float epsilon, u32 num_actions)
+		: m_default_policy(default_policy), m_epsilon(epsilon), m_num_actions(num_actions)
+	{ }
+
+private:
+	// Mark as private to prevent user access
+	std::pair<u32, float> Choose_Action(std::string unique_key, Ctx& context)
+	{
+		return std::pair<u32, float>(0, .5f);
+	}
+private:
+	IPolicy<Ctx>& m_default_policy;
+	float m_epsilon;
+	u32 m_num_actions;
+};
+
+template <class Ctx>
+class SoftmaxExplorer : public IExplorer<Ctx>
+{
+public:
+	SoftmaxExplorer(IScorer<Ctx>& default_scorer, float lambda, u32 num_actions)
+		: m_default_scorer(default_scorer), m_lambda(lambda), m_num_actions(num_actions)
+	{ }
+
+private:
+	// Mark as private to prevent user access
+	std::pair<u32, float> Choose_Action(std::string unique_key, Ctx& context)
+	{
+		// Generates a distribution and samples from it to get an action and probability.
+		return std::pair<u32, float>(0, .1f);
+	}
+private:
+	IScorer<Ctx>& m_default_scorer;
+	float m_lambda;
+	u32 m_num_actions;
+};
+
+template <class Ctx>
+class MWT
+{
+public:
+	MWT(std::string app_id, IRecorder<Ctx>& recorder) : m_recorder(recorder)
+	{
 		// . . .
 	}
 
-	template <class Ctx>
-	pair<u32, float> Choose_Action(Ctx& context, string unique_key)
+	u32 Choose_Action(IExplorer<Ctx>& explorer, string unique_key, Ctx& context)
 	{
-		u32 action = policy_function.Choose_Action(context); // Implicitly enforce Choose_Action() API on the policy
-		float prob = 0.f;
-		// . . .
-		return pair<u32, float>(action, prob);
+		std::pair<u32, float> action_prob = explorer.Choose_Action(unique_key, context);
+
+		u32 action = action_prob.first;
+		float prob = action_prob.second;
+
+		m_recorder.Record(context, action, prob, unique_key);
+
+		return action;
 	}
 
 private:
-	Plc& policy_function;
+	u64 m_app_id;
+	IRecorder<Ctx>& m_recorder;
 };
 
-template <class Scr>
-struct Softmax
+// -------------------------------------- Example user code -------------------------------------- //
+
+class MyContext
 {
-	Softmax(float lambda, u32 num_actions, Scr& scorer) : m_scorer_function(scorer)
-	{
-		// . . .
-	}
 
-	template <class Ctx>
-	pair<u32, float> Choose_Action(Ctx& context, string unique_key)
-	{
-		vector<float> action_dist = m_scorer_function.Score_Actions(context); // Implicitly enforce Choose_Action() API on the policy
-		u32 action = 1;
-		float prob = 0.f;
-		// . . .
-		return pair<u32, float>(action, prob);
-	}
-
-private:
-	Scr& m_scorer_function;
 };
 
-template <class Rec>
-struct Mwt
+class MyPolicy : public IPolicy<MyContext>
 {
-	Mwt(string app_id, Rec& interaction_recorder) :
-		m_app_id(app_id), m_interaction_recorder(interaction_recorder)
+public:
+	MyPolicy(/* ... */) { } // Custom constructors
+
+	u32 Choose_Action(MyContext& context)
 	{
-		// . . .
-	}
-
-	template <class Exp, class Ctx>
-	u32 Choose_Action(Exp& explorer, Ctx& context, string unique_key)
-	{
-		// Implicitly enforce Choose_Action() API on the policy
-		pair<u32, float> action_prob = explorer.Choose_Action(context, unique_key + m_app_id);
-
-		// Implicitly enforce Record() API on the context
-		m_interaction_recorder.Record(context, action_prob.first, action_prob.second, unique_key);
-
-		return action_prob.first;
-	}
-
-private:
-	string m_app_id;
-	Rec& m_interaction_recorder;
-};
-
-// Default Recorder that converts tuple into string format.
-struct StringRecorder
-{
-	template <class Ctx>
-	void Record(Ctx& context, u32 action, float probability, string unique_key)
-	{
-		// Implicitly enforce To_String() API on the context
-		m_recording.append(context.To_String());
-		m_recording.append(to_string(action));
-		m_recording.append(to_string(probability));
-		m_recording.append(unique_key);
+		u32 whatever_action = 1;
+		return whatever_action;
 	}
 private:
-	string m_recording;
+	// Custom variables, states, etc... here
 };
 
-/******** Example user code ********/
-
-struct MyContext
+class MyScorer : public IScorer<MyContext>
 {
-	string To_String()
+public:
+	MyScorer(/* ... */) // Custom constructors
 	{
-		return "";
-	}
-};
 
-struct MyPolicy
-{
-	u32 Choose_Action(MyContext& my_context)
-	{
-		return 0;
 	}
-};
 
-struct MyScorer
-{
-	vector<float> Score_Actions(MyContext& my_context)
+	vector<float> Score_Actions(MyContext& context)
 	{
 		return vector<float>();
 	}
+private:
+	// Custom variables, states, etc... here
 };
 
-struct MyRecorder
+class MyRecorder : public IRecorder<MyContext>
 {
-	void Record(MyContext& context, u32 action, float probability, string unique_key)
+public:
+	virtual void Record(MyContext& context, u32 action, float probability, string unique_key)
 	{
-		// . . .
+
 	}
 };
 
 int _tmain(int argc, _TCHAR* argv[])
 {
+	// Epislon greedy exploration
 	{
-		// Epsilon Greedy exploration using default string recorder
-		StringRecorder my_recorder;
-		Mwt<StringRecorder> mwt("salt", my_recorder);
-
-		MyContext my_context;
-		MyPolicy my_policy;
-		EpsilonGreedy<MyPolicy> my_explorer(0.5f, 10, my_policy);
-
-		u32 action = mwt.Choose_Action(my_explorer, my_context, "key");
+		u32 num_actions = 10;
+		float epsilon = 0.5f;
+		MyRecorder logger;
+		MyPolicy default_policy;
+		MyContext context;
+		EpsilonGreedyExplorer<MyContext> explorer(default_policy, epsilon, num_actions);
+		MWT<MyContext> mwt("salt", logger);
+		u32 action = mwt.Choose_Action(explorer, "unique_key", context);
 	}
-
+	// Softmax exploration
 	{
-		// Softmax exploration using user-defined recorder
-		MyRecorder my_recorder;
-		Mwt<MyRecorder> mwt("salt", my_recorder);
-
-		MyContext my_context;
-		MyScorer my_scorer;
-		Softmax<MyScorer> my_explorer(0.5f, 10, my_scorer);
-
-		u32 action = mwt.Choose_Action(my_explorer, my_context, "key");
+		u32 num_actions = 10;
+		float lambda = 0.1f;
+		MyRecorder logger;
+		MyScorer default_scorer;
+		MyContext context;
+		SoftmaxExplorer<MyContext> explorer(default_scorer, lambda, num_actions);
+		MWT<MyContext> mwt("salt", logger);
+		u32 action = mwt.Choose_Action(explorer, "unique_key", context);
 	}
-
-	return 0;
 }
-
