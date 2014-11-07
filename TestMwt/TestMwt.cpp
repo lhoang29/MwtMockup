@@ -29,7 +29,7 @@ typedef int8_t i8;
 
 // -------------------------------------- Example user code -------------------------------------- //
 
-template <class Ctx>
+template <class Rec>
 class MWT;
 
 template <class Ctx>
@@ -53,67 +53,68 @@ public:
 	virtual vector<float> Score_Actions(Ctx& context) = 0;
 };
 
-template <class Ctx>
-class IExplorer
-{
-private:
-	virtual std::pair<u32, float> Choose_Action(std::string unique_key, Ctx& context) = 0;
-
-private:
-	friend MWT<Ctx>;
-};
-
-template <class Ctx>
-class EpsilonGreedyExplorer : public IExplorer<Ctx>
+template <class Plc>
+class EpsilonGreedyExplorer
 {
 public:
-	EpsilonGreedyExplorer(IPolicy<Ctx>& default_policy, float epsilon, u32 num_actions)
+	EpsilonGreedyExplorer(Plc& default_policy, float epsilon, u32 num_actions)
 		: m_default_policy(default_policy), m_epsilon(epsilon), m_num_actions(num_actions)
 	{ }
 
 private:
 	// Mark as private to prevent user access
+	template <class Ctx>
 	std::pair<u32, float> Choose_Action(std::string unique_key, Ctx& context)
 	{
 		return std::pair<u32, float>(0, .5f);
 	}
 private:
-	IPolicy<Ctx>& m_default_policy;
+	Plc& m_default_policy;
 	float m_epsilon;
 	u32 m_num_actions;
+
+private:
+	template <class Rec>
+	friend class MWT;
 };
 
-template <class Ctx>
-class SoftmaxExplorer : public IExplorer<Ctx>
+template <class Scr>
+class SoftmaxExplorer
 {
 public:
-	SoftmaxExplorer(IScorer<Ctx>& default_scorer, float lambda, u32 num_actions)
+	SoftmaxExplorer(Scr& default_scorer, float lambda, u32 num_actions)
 		: m_default_scorer(default_scorer), m_lambda(lambda), m_num_actions(num_actions)
 	{ }
 
 private:
 	// Mark as private to prevent user access
+	template <class Ctx>
 	std::pair<u32, float> Choose_Action(std::string unique_key, Ctx& context)
 	{
 		// Generates a distribution and samples from it to get an action and probability.
 		return std::pair<u32, float>(0, .1f);
 	}
 private:
-	IScorer<Ctx>& m_default_scorer;
+	Scr& m_default_scorer;
 	float m_lambda;
 	u32 m_num_actions;
+
+private:
+	template <class Rec>
+	friend class MWT;
 };
 
-template <class Ctx>
+template <class Rec>
 class MWT
 {
 public:
-	MWT(std::string app_id, IRecorder<Ctx>& recorder) : m_recorder(recorder)
+	MWT(std::string app_id, Rec& recorder) : m_recorder(recorder)
 	{
 		// . . .
 	}
 
-	u32 Choose_Action(IExplorer<Ctx>& explorer, string unique_key, Ctx& context)
+	template <class Exp, class Ctx>
+	u32 Choose_Action(Exp& explorer, string unique_key, Ctx& context)
 	{
 		std::pair<u32, float> action_prob = explorer.Choose_Action(unique_key, context);
 
@@ -127,7 +128,7 @@ public:
 
 private:
 	u64 m_app_id;
-	IRecorder<Ctx>& m_recorder;
+	Rec& m_recorder;
 };
 
 // -------------------------------------- Example user code -------------------------------------- //
@@ -182,11 +183,11 @@ int _tmain(int argc, _TCHAR* argv[])
 	{
 		u32 num_actions = 10;
 		float epsilon = 0.5f;
-		MyRecorder logger;
+		MyRecorder recorder;
 		MyPolicy default_policy;
 		MyContext context;
-		EpsilonGreedyExplorer<MyContext> explorer(default_policy, epsilon, num_actions);
-		MWT<MyContext> mwt("salt", logger);
+		EpsilonGreedyExplorer<MyPolicy> explorer(default_policy, epsilon, num_actions);
+		MWT<MyRecorder> mwt("salt", recorder);
 		u32 action = mwt.Choose_Action(explorer, "unique_key", context);
 	}
 	// Softmax exploration
@@ -196,8 +197,8 @@ int _tmain(int argc, _TCHAR* argv[])
 		MyRecorder logger;
 		MyScorer default_scorer;
 		MyContext context;
-		SoftmaxExplorer<MyContext> explorer(default_scorer, lambda, num_actions);
-		MWT<MyContext> mwt("salt", logger);
+		SoftmaxExplorer<MyScorer> explorer(default_scorer, lambda, num_actions);
+		MWT<MyRecorder> mwt("salt", logger);
 		u32 action = mwt.Choose_Action(explorer, "unique_key", context);
 	}
 }
